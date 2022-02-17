@@ -14,6 +14,7 @@ package org.eclipse.lsp4j.jsonrpc.json;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -75,8 +76,9 @@ public class StreamMessageProducer implements MessageProducer, Closeable, Messag
 			StringBuilder debugBuilder = null;
 			boolean newLine = false;
 			Headers headers = new Headers();
+			InputStreamReader inputReader = new InputStreamReader(input, headers.charset);
 			while (keepRunning) {
-				int c = input.read();
+				int c = inputReader.read();
 				if (c == -1) {
 					// End of input stream has been reached
 					keepRunning = false;
@@ -91,7 +93,7 @@ public class StreamMessageProducer implements MessageProducer, Closeable, Messag
 								fireError(new IllegalStateException("Missing header " + CONTENT_LENGTH_HEADER
 										+ " in input \"" + debugBuilder + "\""));
 							} else {
-								boolean result = handleMessage(input, headers);
+								boolean result = handleMessage(inputReader, headers);
 								if (!result)
 									keepRunning = false;
 								newLine = false;
@@ -172,23 +174,23 @@ public class StreamMessageProducer implements MessageProducer, Closeable, Messag
 	 * 
 	 * @return {@code true} if we should continue reading from the input stream, {@code false} if we should stop
 	 */
-	protected boolean handleMessage(InputStream input, Headers headers) throws IOException {
+	protected boolean handleMessage(InputStreamReader inputReader, Headers headers) throws IOException {
 		if (callback == null)
 			callback = message -> LOG.log(Level.INFO, "Received message: " + message);
 		
 		try {
 			int contentLength = headers.contentLength;
-			byte[] buffer = new byte[contentLength];
+			char[] buffer = new char[contentLength];
 			int bytesRead = 0;
 
 			while (bytesRead < contentLength) {
-				int readResult = input.read(buffer, bytesRead, contentLength - bytesRead);
+				int readResult = inputReader.read(buffer, bytesRead, contentLength - bytesRead);
 				if (readResult == -1)
 					return false;
 				bytesRead += readResult;
 			}
 
-			String content = new String(buffer, headers.charset);
+			String content = new String(buffer);
 			try {
 				Message message = jsonHandler.parseMessage(content);
 				callback.consume(message);
